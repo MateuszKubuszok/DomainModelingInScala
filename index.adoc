@@ -1,28 +1,274 @@
-= Title Slide
+= Domain modelling in Scala
 
-== Slide One
+== Domain-Driven Design
 
 [%step]
-* Foo
-* Bar
-* World
+* models (data)
+ ** values
+ ** entities
+ ** events
+* behaviors
+ ** factories
+ ** repositories
+ ** services
 
-== Slide Two
+== Models
 
-Hello World - Good Bye Cruel World
+=== Value
+
+> An immutalbe object which is only distinquishable by its properties.
 
 [NOTE.speaker]
 --
-Actually things aren't that bad
+Let's start with an example using build-in types.
 --
 
-== Source code
+=== !
 
 [source, scala]
 --
-val test = task
-  .map(identity)
-  .flatMap(a => Something(b))
-  .runSyncUnsafe
-  // result
+val age:  Int    = 18
+val name: String = "John Smith"
+val cash: Double = 14.56
 --
+
+[source, scala]
+--
+age == age // true
+age == (age + 1) // false
+name == "John Smish" // true
+name == "John Doe" // false
+cash == 14.56 // true
+cash == 14.57 // false
+--
+
+[NOTE.speaker]
+--
+Values are immutable and they are their identity - any change creates a different value.
+
+The properties are reserves when we start aggregating smaller values into bigger values.
+--
+
+=== !
+
+[source, scala]
+--
+val accountDetails: (Int, String, Double) = (age, name, cash)
+accountDetails == accountDetails // true
+accountDetails == accountDetails.copy(_1 = 19) // false
+--
+
+[NOTE.speaker]
+--
+This must be true even if we start building on top of them.
+
+(Int, String, Double) is not really descriptive.
+--
+
+=== !
+
+[source, scala]
+--
+type Age = Int
+type Name = String
+type Cash = Double
+--
+
+[source, scala]
+--
+val age:  Age  = 18
+val name: Name = "John Smith"
+val cash: Cash = 14.56
+--
+
+[NOTE.speaker]
+--
+Domain-wise built-in types are not descriptive so it's better to encode some information in type.
+--
+
+=== !
+
+[source, scala]
+--
+case class AccountDetails(name: Name, age: Age, cash: Cash)
+--
+
+[source, scala]
+--
+val details = AccountDetails("John Smith", 18, 14.56)
+details == details // true
+details == details.copy(age = 19) // false
+--
+
+[NOTE.speaker]
+--
+As you can see nothing require us to ensure that name, age, cash is correct.
+--
+
+=== !
+
+[source, scala]
+--
+type Name = String
+type Surname = String
+
+val name: Name = "John"
+val surname: Surname = name // :(
+--
+
+[NOTE.speaker]
+--
+We can solve this problem by making them separate types.
+--
+
+=== !
+
+[source, scala]
+--
+case class Name(value: String) extends AnyVal
+case class Surname(value: String) extends AnyVal
+
+val name: Name = Name("John")
+val surname: Surname = name // compiler error :)
+--
+
+[NOTE.speaker]
+--
+Now if we mistake 2 values we will get a compile-time error.
+--
+
+=== !
+
+[source, scala]
+--
+case class Email(value: String) extends AnyVal
+
+sealed trait EmailStatus
+object EmailStatus {
+  case class Confirming(unconfirmed: Email)
+      extends UserRegistration
+  case class Confirmed(confirmed: Email)
+      extends UserRegistration
+  case class Changing(old: Email, newUnconfirmed: Email)
+      extends UserRegistration
+}
+--
+
+=== !
+
+[source, scala]
+--
+val emailStatus: EmailStatus = ...
+
+emailStatus match {
+  case EmailStatus.Confirming(unconfirmed) =>
+    println(s"Email $unconfirmed is not confirmed yet")
+  case EmailStatus.Confirmed(confirmed) =>
+    println(s"Email is confirmed $confirmed")
+  case EmailStatus.Changing(old, newUnconfirmed) =>
+    println(s"Old email $old is confirmed" +
+        s"but user requested change $newUnconfirmed")
+}
+--
+
+=== Entity
+
+> An object which has some intrinsic identity, which allows tracing its state's changes in time.
+
+=== !
+
+[source, scala]
+--
+case class UserId(value: UUID) extends AnyVal
+case class Name(value: String) extends AnyVal
+case class Surname(value: String) extends AnyVal
+case class UserData(name: Name, surname: Surname)
+
+case class User(id: UserId, data: UserData) {
+  
+  override def equals(obj: Any): Boolean = obj match {
+    case User(otherId, _) => id == otherId
+    case  _               => false
+  }
+
+  override def hashCode: Int = id.hashcode
+}
+--
+
+=== !
+
+[source, scala]
+--
+val userId = UserId(UUID.randomUUID)
+val data = UserData(Name("John"), Surname("Smith"))
+val user = User(userId, data)
+
+user == user // true
+
+import com.softwaremill.quicklens._
+user == user.modify(_.data.name).set(Name("Jane")) // true
+
+user == user.copy(id = UserId(UUID.randomUUID)) // false
+--
+
+=== Event
+
+> An information that something happened in the system.
+
+[NOTE.speaker]
+--
+It might be a call, callback, record in ledger (esp in event-sourcing).
+--
+
+=== !
+
+[source, scala]
+--
+case class UserCreated(
+  userId: UserId,
+  data: UserData,
+  at: Instant
+)
+--
+
+== Behaviors
+
+=== Side-effect free
+
+=== !
+
+[source, scala]
+--
+sealed abstract case class PlanName(value: String)
+    extends AnyVal {
+  def +(another: PlanName): PlanName =
+    new PlanName(value + " " + another.value) {}
+}
+object PlanName {
+  def apply(value: String): Either[String, PlanName] =
+    if (value.trim.isEmpty) {
+      Left(s"'$value' is not a valid plan name")
+    } else Right(new PlanName(value.trim) {})
+}
+--
+
+[source, scala]
+--
+import cats.implicits._
+(PlanName("personal"), PlanName("liability")).tupled match {
+  case Right((name1, name2)) =>
+    println(s"validation succeeded: ${plan1 + plan2}")
+  case Left(error) =>
+    println(error)
+}
+--
+
+[NOTE.speaker]
+--
+Smart constructors might be treated as a special case of a factory.
+
+First use case for Cats.
+--
+
+=== Side effects
+

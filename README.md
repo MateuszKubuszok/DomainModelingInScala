@@ -1,4 +1,4 @@
-# Presentation title
+# Domain modelling in Scala
 
 ## Running
 
