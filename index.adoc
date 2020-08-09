@@ -36,8 +36,10 @@ val cash: Double = 14.56
 --
 age == age // true
 age == (age + 1) // false
+
 name == "John Smish" // true
 name == "John Doe" // false
+
 cash == 14.56 // true
 cash == 14.57 // false
 --
@@ -54,6 +56,7 @@ The properties are reserves when we start aggregating smaller values into bigger
 [source, scala]
 --
 val accountDetails: (Int, String, Double) = (age, name, cash)
+
 accountDetails == accountDetails // true
 accountDetails == accountDetails.copy(_1 = 19) // false
 --
@@ -96,6 +99,7 @@ case class AccountDetails(name: Name, age: Age, cash: Cash)
 [source, scala]
 --
 val details = AccountDetails("John Smith", 18, 14.56)
+
 details == details // true
 details == details.copy(age = 19) // false
 --
@@ -109,10 +113,10 @@ As you can see nothing require us to ensure that name, age, cash is correct.
 
 [source, scala]
 --
-type Name = String
+type Name    = String
 type Surname = String
 
-val name: Name = "John"
+val name:    Name    = "John"
 val surname: Surname = name // :(
 --
 
@@ -128,7 +132,7 @@ We can solve this problem by making them separate types.
 case class Name(value: String) extends AnyVal
 case class Surname(value: String) extends AnyVal
 
-val name: Name = Name("John")
+val name:    Name    = Name("John")
 val surname: Surname = name // compiler error :)
 --
 
@@ -145,12 +149,15 @@ case class Email(value: String) extends AnyVal
 
 sealed trait EmailStatus
 object EmailStatus {
+
   case class Confirming(unconfirmed: Email)
-      extends UserRegistration
+      extends EmailStatus
+
   case class Confirmed(confirmed: Email)
-      extends UserRegistration
+      extends EmailStatus
+
   case class Changing(old: Email, newUnconfirmed: Email)
-      extends UserRegistration
+      extends EmailStatus
 }
 --
 
@@ -166,8 +173,10 @@ emailStatus match {
   case EmailStatus.Confirmed(confirmed) =>
     println(s"Email is confirmed $confirmed")
   case EmailStatus.Changing(old, newUnconfirmed) =>
-    println(s"Old email $old is confirmed" +
-        s"but user requested change $newUnconfirmed")
+    println(
+      s"Old email $old is confirmed" +
+        s" but user requested change $newUnconfirmed"
+    )
 }
 --
 
@@ -185,10 +194,10 @@ case class Surname(value: String) extends AnyVal
 case class UserData(name: Name, surname: Surname)
 
 case class User(id: UserId, data: UserData) {
-  
+
   override def equals(obj: Any): Boolean = obj match {
     case User(otherId, _) => id == otherId
-    case  _               => false
+    case _                => false
   }
 
   override def hashCode: Int = id.hashcode
@@ -224,11 +233,25 @@ It might be a call, callback, record in ledger (esp in event-sourcing).
 
 [source, scala]
 --
+case class UserCreationRequested(
+  data: UserData
+)
+
 case class UserCreated(
   userId: UserId,
   data: UserData,
   at: Instant
 )
+--
+
+[source, scala]
+--
+val createUser: UserCreationRequested => UserCreated
+--
+
+[NOTE.speaker]
+--
+How could we model events to separate business process from side effects.
 --
 
 == Behaviors
@@ -239,13 +262,12 @@ case class UserCreated(
 
 [source, scala]
 --
-sealed abstract case class PlanName(value: String)
-    extends AnyVal {
+sealed abstract case class PlanName(value: String) {
   def +(another: PlanName): PlanName =
     new PlanName(value + " " + another.value) {}
 }
 object PlanName {
-  def apply(value: String): Either[String, PlanName] =
+  def parse(value: String): Either[String, PlanName] =
     if (value.trim.isEmpty) {
       Left(s"'$value' is not a valid plan name")
     } else Right(new PlanName(value.trim) {})
@@ -255,7 +277,10 @@ object PlanName {
 [source, scala]
 --
 import cats.implicits._
-(PlanName("personal"), PlanName("liability")).tupled match {
+val names: Either[String, (PlanName, PlanName)] =
+  (PlanName.parse("personal"), PlanName.parse("liability"))
+    .tupled
+names match {
   case Right((name1, name2)) =>
     println(s"validation succeeded: ${plan1 + plan2}")
   case Left(error) =>
@@ -269,7 +294,84 @@ import cats.implicits._
 Smart constructors might be treated as a special case of a factory.
 
 First use case for Cats.
+
+[source, scala]
+----
+import $ivy.`org.typelevel::cats-core:2.1.0`, cats._, cats.data._, cats.implicits._
+----
+--
+
+=== !
+
+[source, scala]
+--
+val version2: PlanName = PlanName.parse("version 2").right.get
+--
+
+[source, scala]
+--
+PlanName.parse("household").flatMap { name1 =>
+  PlanName.parse(name1.value + " insurance").map { name2 =>
+    name2 + version2
+  }
+}
+// Right(PlanName("household insurance version 2"))
+--
+
+[source, scala]
+--
+for {
+  name1 <- PlanName.parse("household")
+  name2 <- PlanName.parse(name1.value + " insurance")
+} yield name2 + version2
+--
+
+[NOTE.speaker]
+--
+Show some examples in REPL here.
 --
 
 === Side effects
 
+=== !
+
+[source, scala]
+--
+import cats.effect.IO
+
+val program = IO.delay { scala.io.StdIn.readLine }
+  .map(PlanName.parse)
+  .flatMap {
+    case Left(error) => IO.raiseError(new Exception(error))
+    case Right(name) => IO.pure(name)
+  }
+  .map { name => println(s"Valid plan name: $name") }
+  .handleError {
+    case e: Throwable => e.printStackTrace()
+  }
+--
+
+[source, scala]
+--
+program.unsafeRunSync
+--
+
+[source, scala]
+--
+program.unsafeRunAsync { result =>
+  println(s"Program finished with: $result")
+}
+--
+
+[source, scala]
+--
+program.unsafeToFuture
+--
+
+[NOTE.speaker]
+--
+[source, scala]
+----
+import $ivy.`org.typelevel::cats-effect:2.1.3`, cats.effect._
+----
+--

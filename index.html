@@ -161,12 +161,15 @@ val name: String = "John Smith"
 val cash: Double = 14.56</code></pre></div></div>
 <div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">age == age // true
 age == (age + 1) // false
+
 name == "John Smish" // true
 name == "John Doe" // false
+
 cash == 14.56 // true
 cash == 14.57 // false</code></pre></div></div>
 <aside class="notes"><div class="paragraph"><p>Values are immutable and they are their identity - any change creates a different value.</p></div>
 <div class="paragraph"><p>The properties are reserves when we start aggregating smaller values into bigger values.</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val accountDetails: (Int, String, Double) = (age, name, cash)
+
 accountDetails == accountDetails // true
 accountDetails == accountDetails.copy(_1 = 19) // false</code></pre></div></div>
 <aside class="notes"><div class="paragraph"><p>This must be true even if we start building on top of them.</p></div>
@@ -178,28 +181,32 @@ val name: Name = "John Smith"
 val cash: Cash = 14.56</code></pre></div></div>
 <aside class="notes"><div class="paragraph"><p>Domain-wise built-in types are not descriptive so it&#8217;s better to encode some information in type.</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class AccountDetails(name: Name, age: Age, cash: Cash)</code></pre></div></div>
 <div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val details = AccountDetails("John Smith", 18, 14.56)
+
 details == details // true
 details == details.copy(age = 19) // false</code></pre></div></div>
-<aside class="notes"><div class="paragraph"><p>As you can see nothing require us to ensure that name, age, cash is correct.</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">type Name = String
+<aside class="notes"><div class="paragraph"><p>As you can see nothing require us to ensure that name, age, cash is correct.</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">type Name    = String
 type Surname = String
 
-val name: Name = "John"
+val name:    Name    = "John"
 val surname: Surname = name // :(</code></pre></div></div>
 <aside class="notes"><div class="paragraph"><p>We can solve this problem by making them separate types.</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class Name(value: String) extends AnyVal
 case class Surname(value: String) extends AnyVal
 
-val name: Name = Name("John")
+val name:    Name    = Name("John")
 val surname: Surname = name // compiler error :)</code></pre></div></div>
 <aside class="notes"><div class="paragraph"><p>Now if we mistake 2 values we will get a compile-time error.</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class Email(value: String) extends AnyVal
 
 sealed trait EmailStatus
 object EmailStatus {
+
   case class Confirming(unconfirmed: Email)
-      extends UserRegistration
+      extends EmailStatus
+
   case class Confirmed(confirmed: Email)
-      extends UserRegistration
+      extends EmailStatus
+
   case class Changing(old: Email, newUnconfirmed: Email)
-      extends UserRegistration
+      extends EmailStatus
 }</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val emailStatus: EmailStatus = ...
 
 emailStatus match {
@@ -208,8 +215,10 @@ emailStatus match {
   case EmailStatus.Confirmed(confirmed) =&gt;
     println(s"Email is confirmed $confirmed")
   case EmailStatus.Changing(old, newUnconfirmed) =&gt;
-    println(s"Old email $old is confirmed" +
-        s"but user requested change $newUnconfirmed")
+    println(
+      s"Old email $old is confirmed" +
+        s" but user requested change $newUnconfirmed"
+    )
 }</code></pre></div></div></div></section><section id="_entity"><h2>Entity</h2><div class="slide-content"><div class="quoteblock"><blockquote><div class="paragraph"><p>An object which has some intrinsic identity, which allows tracing its state&#8217;s changes in time.</p></div></blockquote></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class UserId(value: UUID) extends AnyVal
 case class Name(value: String) extends AnyVal
 case class Surname(value: String) extends AnyVal
@@ -219,7 +228,7 @@ case class User(id: UserId, data: UserData) {
 
   override def equals(obj: Any): Boolean = obj match {
     case User(otherId, _) =&gt; id == otherId
-    case  _               =&gt; false
+    case _                =&gt; false
   }
 
   override def hashCode: Int = id.hashcode
@@ -233,24 +242,32 @@ import com.softwaremill.quicklens._
 user == user.modify(_.data.name).set(Name("Jane")) // true
 
 user == user.copy(id = UserId(UUID.randomUUID)) // false</code></pre></div></div></div></section><section id="_event"><h2>Event</h2><div class="slide-content"><div class="quoteblock"><blockquote><div class="paragraph"><p>An information that something happened in the system.</p></div></blockquote></div>
-<aside class="notes"><div class="paragraph"><p>It might be a call, callback, record in ledger (esp in event-sourcing).</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class UserCreated(
+<aside class="notes"><div class="paragraph"><p>It might be a call, callback, record in ledger (esp in event-sourcing).</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class UserCreationRequested(
+  data: UserData
+)
+
+case class UserCreated(
   userId: UserId,
   data: UserData,
   at: Instant
-)</code></pre></div></div></div></section></section>
-<section><section id="_behaviors"><h2>Behaviors</h2></section><section id="_side_effect_free"><h2>Side-effect free</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">sealed abstract case class PlanName(value: String)
-    extends AnyVal {
+)</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val createUser: UserCreationRequested =&gt; UserCreated</code></pre></div></div>
+<aside class="notes"><div class="paragraph"><p>How could we model events to separate business process from side effects.</p></div></aside></div></section></section>
+<section><section id="_behaviors"><h2>Behaviors</h2></section><section id="_side_effect_free"><h2>Side-effect free</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">sealed abstract case class PlanName(value: String) {
   def +(another: PlanName): PlanName =
     new PlanName(value + " " + another.value) {}
 }
 object PlanName {
-  def apply(value: String): Either[String, PlanName] =
+  def parse(value: String): Either[String, PlanName] =
     if (value.trim.isEmpty) {
       Left(s"'$value' is not a valid plan name")
     } else Right(new PlanName(value.trim) {})
 }</code></pre></div></div>
 <div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import cats.implicits._
-(PlanName("personal"), PlanName("liability")).tupled match {
+val names: Either[String, (PlanName, PlanName)] =
+  (PlanName.parse("personal"), PlanName.parse("liability"))
+    .tupled
+names match {
   case Right((name1, name2)) =&gt;
     println(s"validation succeeded: ${plan1 + plan2}")
   case Left(error) =&gt;
@@ -258,7 +275,36 @@ object PlanName {
 }
 // validation succeeded: personal liability</code></pre></div></div>
 <aside class="notes"><div class="paragraph"><p>Smart constructors might be treated as a special case of a factory.</p></div>
-<div class="paragraph"><p>First use case for Cats.</p></div></aside></div></section><section id="_side_effects"><h2>Side effects</h2></section></section></div></div><script src="./js/reveal.js"></script><script>Array.prototype.slice.call(document.querySelectorAll('.slides section')).forEach(function(slide) {
+<div class="paragraph"><p>First use case for Cats.</p></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import $ivy.`org.typelevel::cats-core:2.1.0`, cats._, cats.data._, cats.implicits._</code></pre></div></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val version2: PlanName = PlanName.parse("version 2").right.get</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">PlanName.parse("household").flatMap { name1 =&gt;
+  PlanName.parse(name1.value + " insurance").map { name2 =&gt;
+    name2 + version2
+  }
+}
+// Right(PlanName("household insurance version 2"))</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">for {
+  name1 &lt;- PlanName.parse("household")
+  name2 &lt;- PlanName.parse(name1.value + " insurance")
+} yield name2 + version2</code></pre></div></div>
+<aside class="notes"><div class="paragraph"><p>Show some examples in REPL here.</p></div></aside></div></section><section id="_side_effects"><h2>Side effects</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import cats.effect.IO
+
+val program = IO.delay { scala.io.StdIn.readLine }
+  .map(PlanName.parse)
+  .flatMap {
+    case Left(error) =&gt; IO.raiseError(new Exception(error))
+    case Right(name) =&gt; IO.pure(name)
+  }
+  .map { name =&gt; println(s"Valid plan name: $name") }
+  .handleError {
+    case e: Throwable =&gt; e.printStackTrace()
+  }</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">program.unsafeRunSync</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">program.unsafeRunAsync { result =&gt;
+  println(s"Program finished with: $result")
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">program.unsafeToFuture</code></pre></div></div>
+<aside class="notes"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import $ivy.`org.typelevel::cats-effect:2.1.3`, cats.effect._</code></pre></div></div></aside></div></section></section></div></div><script src="./js/reveal.js"></script><script>Array.prototype.slice.call(document.querySelectorAll('.slides section')).forEach(function(slide) {
   if (slide.getAttribute('data-background-color')) return;
   // user needs to explicitly say he wants CSS color to override otherwise we might break custom css or theme (#226)
   if (!(slide.classList.contains('canvas') || slide.classList.contains('background'))) return;
