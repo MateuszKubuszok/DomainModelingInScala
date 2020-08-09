@@ -1,4 +1,4 @@
-= Domain modelling in Scala
+= Domain modeling in Scala
 
 == Domain-Driven Design
 
@@ -261,6 +261,7 @@ import cats.implicits._
   case Left(error) =>
     println(error)
 }
+// validation succeeded: personal liability
 --
 
 [NOTE.speaker]

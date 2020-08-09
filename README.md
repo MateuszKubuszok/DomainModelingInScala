@@ -1,4 +1,4 @@
-# Domain modelling in Scala
+# Domain modeling in Scala
 
 ## Running
 
