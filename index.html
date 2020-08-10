@@ -367,7 +367,8 @@ import java.time.Instant</code></pre></div></div></aside></div></section><sectio
   def getExactPlan(versionedId: PlanVersionedId): IO[Plan]
   def getLastestPlan(id: PlanId): IO[Plan]
 }</code></pre></div></div>
-<aside class="notes"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import scala.collection.immutable.ListMap
+<aside class="notes"><div class="paragraph"><p>Examples of plan services and repositories.</p></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import scala.collection.immutable.ListMap
 import cats.effect.concurrent.Ref
 
 val (planRepository, planServices) = {
@@ -438,7 +439,103 @@ val planLifecycleTest = for {
       plan2.versionedId.id)
   _ = println("Versions\n" + versions.mkString("\n"))
 } yield versions</code></pre></div></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">planVersioningTest.unsafeRunSync</code></pre></div></div></div></section></section></div></div><script src="./js/reveal.js"></script><script>Array.prototype.slice.call(document.querySelectorAll('.slides section')).forEach(function(slide) {
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">planVersioningTest.unsafeRunSync</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class CustomerId(value: UUID) extends AnyVal
+case class ContractId(value: UUID) extends AnyVal
+sealed trait ContractDuration
+object ContractDuration {
+  case class Fixed(from: ZonedDate, until: Instant)
+    extends ContractDuration
+  case class Renewed(from: Instant, lastRenewal: Instant,
+                     terminated: Option[Instant])
+    extends ContractDuration
+}
+case class Coverage(start: Instant, end: Instant)</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class ContractData(
+  customerId: CustomerId,       planVersion: PlanVersionedId
+  duration:   ContractDuration, coverage:    Coverage
+)</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class Contract(id: ContractId, data: ContractData) {
+  override def equals(obj: Any): Boolean = obj match {
+    case Plan(`id`, _) =&gt; true
+    case _             =&gt; false
+  }
+  override def hashCode: Int = versionedId.hashCode
+}</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait ContractServices {
+
+  def createContract(data: ContractData): IO[Contract]
+  def renewContract(
+        id: ContractId,
+        nextRenewal: Instant,
+        nextCoverageEnd: Instant): IO[List[Contract]]
+  def terminateContract(id: ContractId,
+                        at: Instant): IO[Contract]
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait ContractRepository {
+
+  def getContract(id: ContractId): IO[Contract]
+  def listContractsForCustomer(
+        customerId: CustomerId): IO[List[Contract]]
+  def listContractsForRenewal(at: Instant): IO[List[Contract]]
+}</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class ContractCreated(id: ContractId)
+case class ContractRenewed(id: ContractId)
+case class ContractTerminated(id: ContractId)</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class PaymentId(value: UUID) extends AnyVal
+sealed trait PaymentType
+object PaymentType {
+  case object SinglePayment extends PaymentType
+  case class Subscription(renewEvery: Duration)
+      extends PaymentType
+}
+sealed trait PaymentStatus
+object PaymentStatus {
+  case object Scheduled extends PaymentStatus
+  case object Completed extends PaymentStatus
+  case object Failed extends PaymentStatus
+  case object Cancelled extends PaymentStatus
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class CustomerData(
+  name:      CustomerName,
+  surname:   CustomerSurname,
+  addresses: NonEmptyList[Address],
+  email:     Email
+)
+case class Customer(id: CustomerId, data: CustomerData) {
+  // ... override equals and hashCode
+}</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">sealed trait PaymentMethod
+object PaymentMethod {
+  case class CreditCard(...) extends PaymentMethod
+  case class Stripe(...) extends PaymentMethod
+  case class PayPal(...) extends PaymentMethod
+  ...
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class PaymentData(
+  contractId:     ContractId,
+  paymentType:    PaymentType,
+  paymentMethod:  PaymentMethod,
+  status:         PaymentStatus,
+  amount:         Money,
+  customerId:     CustomerId,
+  customerData:   CustomerData,
+  invoiceAddress: Address
+)
+case class Payment(id: PaymentId, data: PaymentData) {
+  // ... override equals and hashCode
+}</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait CustomerRepository {
+  def getCustomerById(id: CustomerId): IO[Customer]
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import squants.market._
+
+trait QuotingServices {
+  def quoteForContract(
+        data: ContractData): IO[(Money, PaymentType)]
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait PaymentServices {
+  def schedulePayment(data: PaymentData): IO[Payment]
+  def renewPayment(paymentId: PaymentId,
+                   at: Instant): IO[Payment]
+  def retryPayment(
+        paymentId: PaymentId,
+        newMethod: Option[PaymentMethod]): IO[Payment]
+}</code></pre></div></div></div></section><section><div class="slide-content"><div class="paragraph"><p>TODO: combine services together</p></div></div></section></section></div></div><script src="./js/reveal.js"></script><script>Array.prototype.slice.call(document.querySelectorAll('.slides section')).forEach(function(slide) {
   if (slide.getAttribute('data-background-color')) return;
   // user needs to explicitly say he wants CSS color to override otherwise we might break custom css or theme (#226)
   if (!(slide.classList.contains('canvas') || slide.classList.contains('background'))) return;

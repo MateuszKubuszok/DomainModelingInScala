@@ -487,6 +487,7 @@ trait PlanRepository {
 
 [NOTE.speaker]
 --
+Examples of plan services and repositories.
 [source, scala]
 ----
 import scala.collection.immutable.ListMap
@@ -578,3 +579,173 @@ val planVersioningTest = for {
 --
 planVersioningTest.unsafeRunSync
 --
+
+=== !
+
+[source, scala]
+--
+case class CustomerId(value: UUID) extends AnyVal
+case class ContractId(value: UUID) extends AnyVal
+sealed trait ContractDuration
+object ContractDuration {
+  case class Fixed(from: ZonedDate, until: Instant)
+    extends ContractDuration
+  case class Renewed(from: Instant, lastRenewal: Instant,
+                     terminated: Option[Instant])
+    extends ContractDuration
+}
+case class Coverage(start: Instant, end: Instant)
+--
+
+[source, scala]
+--
+case class ContractData(
+  customerId: CustomerId,       planVersion: PlanVersionedId
+  duration:   ContractDuration, coverage:    Coverage
+)
+--
+
+[source, scala]
+--
+case class Contract(id: ContractId, data: ContractData) {
+  override def equals(obj: Any): Boolean = obj match {
+    case Plan(`id`, _) => true
+    case _             => false
+  }
+  override def hashCode: Int = versionedId.hashCode
+}
+--
+
+=== !
+
+[source, scala]
+--
+trait ContractServices {
+
+  def createContract(data: ContractData): IO[Contract]
+  def renewContract(
+        id: ContractId,
+        nextRenewal: Instant,
+        nextCoverageEnd: Instant): IO[List[Contract]]
+  def terminateContract(id: ContractId,
+                        at: Instant): IO[Contract]
+}
+--
+
+[source, scala]
+--
+trait ContractRepository {
+
+  def getContract(id: ContractId): IO[Contract]
+  def listContractsForCustomer(
+        customerId: CustomerId): IO[List[Contract]]
+  def listContractsForRenewal(at: Instant): IO[List[Contract]]
+}
+--
+
+=== !
+
+[source, scala]
+--
+case class ContractCreated(id: ContractId)
+case class ContractRenewed(id: ContractId)
+case class ContractTerminated(id: ContractId)
+--
+
+=== !
+
+[source, scala]
+--
+case class PaymentId(value: UUID) extends AnyVal
+sealed trait PaymentType
+object PaymentType {
+  case object SinglePayment extends PaymentType
+  case class Subscription(renewEvery: Duration)
+      extends PaymentType
+}
+sealed trait PaymentStatus
+object PaymentStatus {
+  case object Scheduled extends PaymentStatus
+  case object Completed extends PaymentStatus
+  case object Failed extends PaymentStatus
+  case object Cancelled extends PaymentStatus
+}
+--
+
+[source, scala]
+--
+case class CustomerData(
+  name:      CustomerName,
+  surname:   CustomerSurname,
+  addresses: NonEmptyList[Address],
+  email:     Email
+)
+case class Customer(id: CustomerId, data: CustomerData) {
+  // ... override equals and hashCode
+}
+--
+
+=== !
+
+[source, scala]
+--
+sealed trait PaymentMethod
+object PaymentMethod {
+  case class CreditCard(...) extends PaymentMethod
+  case class Stripe(...) extends PaymentMethod
+  case class PayPal(...) extends PaymentMethod
+  ...
+}
+--
+
+[source, scala]
+--
+case class PaymentData(
+  contractId:     ContractId,
+  paymentType:    PaymentType,
+  paymentMethod:  PaymentMethod,
+  status:         PaymentStatus,
+  amount:         Money,
+  customerId:     CustomerId,
+  customerData:   CustomerData,
+  invoiceAddress: Address
+)
+case class Payment(id: PaymentId, data: PaymentData) {
+  // ... override equals and hashCode
+}
+--
+
+=== !
+
+[source, scala]
+--
+trait CustomerRepository {
+  def getCustomerById(id: CustomerId): IO[Customer]
+}
+--
+
+[source, scala]
+--
+import squants.market._
+
+trait QuotingServices {
+  def quoteForContract(
+        data: ContractData): IO[(Money, PaymentType)]
+}
+--
+
+[source, scala]
+--
+trait PaymentServices {
+  def schedulePayment(data: PaymentData): IO[Payment]
+  def renewPayment(paymentId: PaymentId,
+                   at: Instant): IO[Payment]
+  def retryPayment(
+        paymentId: PaymentId,
+        newMethod: Option[PaymentMethod]): IO[Payment]
+}
+--
+
+=== !
+
+TODO: combine services together
