@@ -1,9 +1,8 @@
 {
   "name": "presentation",
   "version": "1.0.0",
-  "description": "Presentation template",
+  "description": "Domain modeling in Scala",
   "homepage": "https://kubuszok.com",
-  "main": "js/reveal.js",
   "scripts": {
     "start": "grunt serve",
     "build": "grunt",
@@ -16,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/MateuszKubuszok/presentation-template.git"
+    "url": "git://github.com/MateuszKubuszok/DomainModelingInScala.git"
   },
   "devDependencies": {
     "@asciidoctor/core": "2.2.0",

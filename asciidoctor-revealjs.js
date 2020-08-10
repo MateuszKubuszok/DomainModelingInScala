@@ -4,7 +4,7 @@ var asciidoctor = require('@asciidoctor/core')()
 var ascidoctorRevealjs = require('@asciidoctor/reveal.js')
 ascidoctorRevealjs.register()
 
-// Convert the document 'presentation.adoc' using the reveal.js converter
+// Convert the document 'index.adoc' using the reveal.js converter
 var attributes = {
   'revealjsdir': '.',
   'revealjs_history': true,
