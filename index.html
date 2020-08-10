@@ -155,14 +155,14 @@ link.rel = 'stylesheet';
 link.type = 'text/css';
 link.href = window.location.search.match( /print-pdf/gi ) ? "./css/print/pdf.css" : "./css/print/paper.css";
 document.getElementsByTagName( 'head' )[0].appendChild( link );</script></head><body><div class="reveal"><div class="slides"><section class="title" data-state="title"><h1>Domain modeling in Scala</h1></section><section id="_domain_driven_design"><h2>Domain-Driven Design</h2><div class="slide-content"><div class="ulist"><ul><li class="fragment"><p>models (data)</p><div class="ulist"><ul><li><p>values</p></li><li><p>entities</p></li><li><p>events</p></li></ul></div></li><li class="fragment"><p>behaviors</p><div class="ulist"><ul><li><p>factories</p></li><li><p>repositories</p></li><li><p>services</p></li></ul></div></li></ul></div></div></section>
-<section><section id="_models"><h2>Models</h2></section><section id="_value"><h2>Value</h2><div class="slide-content"><div class="quoteblock"><blockquote><div class="paragraph"><p>An immutalbe object which is only distinquishable by its properties.</p></div></blockquote></div>
+<section><section id="_models"><h2>Models</h2></section><section id="_value"><h2>Value</h2><div class="slide-content"><div class="quoteblock"><blockquote><div class="paragraph"><p>An immutable object which is only distinguishable by its properties.</p></div></blockquote></div>
 <aside class="notes"><div class="paragraph"><p>Let&#8217;s start with an example using build-in types.</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val age:  Int    = 18
 val name: String = "John Smith"
 val cash: Double = 14.56</code></pre></div></div>
 <div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">age == age // true
 age == (age + 1) // false
 
-name == "John Smish" // true
+name == "John Smith" // true
 name == "John Doe" // false
 
 cash == 14.56 // true
@@ -242,7 +242,8 @@ import com.softwaremill.quicklens._
 user == user.modify(_.data.name).set(Name("Jane")) // true
 
 user == user.copy(id = UserId(UUID.randomUUID)) // false</code></pre></div></div></div></section><section id="_event"><h2>Event</h2><div class="slide-content"><div class="quoteblock"><blockquote><div class="paragraph"><p>An information that something happened in the system.</p></div></blockquote></div>
-<aside class="notes"><div class="paragraph"><p>It might be a call, callback, record in ledger (esp in event-sourcing).</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class UserCreationRequested(
+<aside class="notes"><div class="paragraph"><p>It might be a call, callback, record in ledger (esp in event-sourcing).</p></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import $ivy.`com.softwaremill.quicklens::quicklens:1.6.0`, com.softwaremill.quicklens._</code></pre></div></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class UserCreationRequested(
   data: UserData
 )
 
@@ -287,24 +288,157 @@ names match {
   name1 &lt;- PlanName.parse("household")
   name2 &lt;- PlanName.parse(name1.value + " insurance")
 } yield name2 + version2</code></pre></div></div>
-<aside class="notes"><div class="paragraph"><p>Show some examples in REPL here.</p></div></aside></div></section><section id="_side_effects"><h2>Side effects</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import cats.effect.IO
+<aside class="notes"><div class="paragraph"><p>Show some examples in REPL here.</p></div></aside></div></section><section id="_side_effects"><h2>Side effects</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import cats.effect._
 
-val program = IO.delay { scala.io.StdIn.readLine }
-  .map(PlanName.parse)
+val program = IO.delay(scala.io.StdIn.readLine) // IO[String]
+  .map(PlanName.parse) // IO[Either[String, PlanName]]
   .flatMap {
     case Left(error) =&gt; IO.raiseError(new Exception(error))
     case Right(name) =&gt; IO.pure(name)
-  }
-  .map { name =&gt; println(s"Valid plan name: $name") }
+  } // IO[PlanName]
+  .map { name =&gt;
+    println(s"Valid plan name: $name")
+  } // IO[Unit]
   .handleError {
     case e: Throwable =&gt; e.printStackTrace()
-  }</code></pre></div></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">program.unsafeRunSync</code></pre></div></div>
+  } // IO[Unit]</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">program.unsafeRunSync // Unit</code></pre></div></div>
 <div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">program.unsafeRunAsync { result =&gt;
   println(s"Program finished with: $result")
+} // Unit</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">program.unsafeToFuture // Future[Unit]</code></pre></div></div>
+<aside class="notes"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import $ivy.`org.typelevel::cats-effect:2.1.3`, cats.effect._</code></pre></div></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import scala.concurrent.duration._
+
+IO.delay(scala.io.StdIn.readLine)
+  .flatMap { in =&gt;
+     val nap      = IO.sleep(2.second)
+     val asBool   = nap &gt;&gt; IO.delay(in.toBoolean).attempt
+     val asInt    = nap &gt;&gt; IO.delay(in.toInt).attempt
+     val asDouble = nap &gt;&gt; IO.delay(in.toDouble).attempt
+     (asBool, asInt, asDouble).parMapN { (b, i, d) =&gt;
+       println(s"$in:\nbool: $b,\nint: $i,\ndouble: $d")
+     }
+  }
+  .unsafeRunAsync(result =&gt; println(result))</code></pre></div></div>
+<aside class="notes"><div class="paragraph"><p>Requires previous definitions and:</p></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">implicit val contextShift: cats.effect.ContextShift[IO] = IO.contextShift(
+  scala.concurrent.ExecutionContext.global
+)
+
+implicit val timer: cats.effect.Timer[IO] = IO.timer(
+  scala.concurrent.ExecutionContext.fromExecutorService(
+    java.util.concurrent.Executors.newCachedThreadPool()
+  )
+)</code></pre></div></div></aside></div></section></section>
+<section><section id="_services"><h2>Services</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class PlanId(value: UUID) extends AnyVal
+case class PlanVersion(value: Int) extends AnyVal
+case class PlanVersionedId(id: PlanId, version: PlanVersion)
+
+sealed trait PlanStatus
+object PlanStatus {
+  case object NotLaunched extends PlanStatus
+  case class Launched(at: Instant) extends PlanStatus
+  case class Retired(validFrom: Instant, validUntil: Instant)
+    extends PlanStatus
+}
+
+case class PlanData(name: PlanName, status: PlanStatus)</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class Plan(versionedId: PlanVersionedId, data: PlanData){
+  override def equals(obj: Any): Boolean = obj match {
+    case Plan(`versionedId`, _) =&gt; true
+    case _                      =&gt; false
+  }
+  override def hashCode: Int = versionedId.hashCode
 }</code></pre></div></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">program.unsafeToFuture</code></pre></div></div>
-<aside class="notes"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import $ivy.`org.typelevel::cats-effect:2.1.3`, cats.effect._</code></pre></div></div></aside></div></section></section></div></div><script src="./js/reveal.js"></script><script>Array.prototype.slice.call(document.querySelectorAll('.slides section')).forEach(function(slide) {
+<aside class="notes"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import java.util.UUID
+import java.time.Instant</code></pre></div></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait PlanServices {
+
+  def createPlan(data: PlanData): IO[Plan]
+  def updatePlan(id: PlanId, data: PlanData): IO[Plan]
+  def launchPlan(versionedId: PlanVersionedId,
+                 at: Instant): IO[Plan]
+  def retirePlan(versionedId: PlanVersionedId,
+                 at: Instant): IO[Plan]
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait PlanRepository {
+
+  def listActivePlans: IO[List[Plan]]
+  def listPlanVersions(id: PlanId): IO[List[Plan]]
+  def getExactPlan(versionedId: PlanVersionedId): IO[Plan]
+  def getLastestPlan(id: PlanId): IO[Plan]
+}</code></pre></div></div>
+<aside class="notes"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import scala.collection.immutable.ListMap
+import cats.effect.concurrent.Ref
+
+val (planRepository, planServices) = {
+val inMemory = Ref.unsafe[IO, Map[PlanId, ListMap[PlanVersion, Plan]]](Map.empty)
+
+val repo: PlanRepository = new PlanRepository {
+  def listActivePlans: IO[List[Plan]] = inMemory.get.map { plans =&gt;
+    val now = Instant.now
+    plans.values.toList.flatMap(_.values.toList).filter { plan =&gt;
+      plan.data.status match {
+        case PlanStatus.NotLaunched       =&gt; false
+        case PlanStatus.Launched(at)      =&gt; at.isBefore(now)
+        case PlanStatus.Retired(from, to) =&gt; from.isBefore(now) &amp;&amp; now.isBefore(to)
+      }
+    }
+  }
+  def listPlanVersions(id: PlanId): IO[List[Plan]] = inMemory.get.map(_(id).values.toList)
+  def getExactPlan(versionedId: PlanVersionedId): IO[Plan] = inMemory.get.map(_(versionedId.id)(versionedId.version))
+  def getLastestPlan(id: PlanId): IO[Plan] = inMemory.get.map(_(id).last._2)
+}
+
+val services: PlanServices = new PlanServices {
+  def createPlan(data: PlanData): IO[Plan] = {
+    val id = PlanId(java.util.UUID.randomUUID)
+    val version = PlanVersion(1)
+    val plan = Plan(PlanVersionedId(id, version), data)
+    inMemory.update { plans =&gt;
+      plans.updated(id, ListMap(version -&gt; plan))
+    } &gt;&gt; IO.pure(plan)
+  }
+  def updatePlan(id: PlanId, data: PlanData): IO[Plan] = inMemory.updateAndGet { plans =&gt;
+    val newPlan = plans(id).last._2
+      .modify(_.versionedId.version).using(old =&gt; PlanVersion(old.value + 1))
+      .modify(_.data).setTo(data)
+    plans.updatedWith(newPlan.versionedId.id)(_.map(_ + (newPlan.versionedId.version -&gt; newPlan)))
+  }.map(_(id).last._2)
+  def launchPlan(versionedId: PlanVersionedId,
+                 at: Instant): IO[Plan] = inMemory.updateAndGet {
+    _.modify(_.at(versionedId.id).at(versionedId.version).data.status).setTo(PlanStatus.Launched(at))
+  }.map(_(versionedId.id)(versionedId.version))
+  def retirePlan(versionedId: PlanVersionedId,
+                 at: Instant): IO[Plan] = inMemory.updateAndGet {
+    _.modify(_.at(versionedId.id).at(versionedId.version).data.status).using {
+      case PlanStatus.Launched(from) =&gt; PlanStatus.Retired(from, at)
+      case _                         =&gt; PlanStatus.Retired(at, at)
+    }
+  }.map(_(versionedId.id)(versionedId.version))
+}
+
+repo -&gt; services
+}</code></pre></div></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val planName = PlanName.parse("my plan").right.get
+val planLifecycleTest = for {
+  plan1 &lt;- planServices.createPlan(
+      PlanData(planName, PlanStatus.NotLaunched))
+  _ &lt;- planServices.launchPlan(plan1.versionedId, Instant.now)
+  _ &lt;- IO.sleep(1.second)
+  active &lt;- planRepository.listActivePlans
+  _ = println("Active plans\n" + active.mkString("\n"))
+  retired &lt;- planServices.retirePlan(plan1.versionedId,
+                                     Instant.now)
+} yield retired</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val planVersioningTest = for {
+  oldPlan &lt;- planLifecycleTest
+  plan2 &lt;- planServices.updatePlan(
+      oldPlan.versionedId.id,
+      PlanData(oldPlan.data.name, PlanStatus.NotLaunched))
+  versions &lt;- planRepository.listPlanVersions(
+      plan2.versionedId.id)
+  _ = println("Versions\n" + versions.mkString("\n"))
+} yield versions</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">planVersioningTest.unsafeRunSync</code></pre></div></div></div></section></section></div></div><script src="./js/reveal.js"></script><script>Array.prototype.slice.call(document.querySelectorAll('.slides section')).forEach(function(slide) {
   if (slide.getAttribute('data-background-color')) return;
   // user needs to explicitly say he wants CSS color to override otherwise we might break custom css or theme (#226)
   if (!(slide.classList.contains('canvas') || slide.classList.contains('background'))) return;

@@ -16,7 +16,7 @@
 
 === Value
 
-> An immutalbe object which is only distinquishable by its properties.
+> An immutable object which is only distinguishable by its properties.
 
 [NOTE.speaker]
 --
@@ -37,7 +37,7 @@ val cash: Double = 14.56
 age == age // true
 age == (age + 1) // false
 
-name == "John Smish" // true
+name == "John Smith" // true
 name == "John Doe" // false
 
 cash == 14.56 // true
@@ -227,6 +227,10 @@ user == user.copy(id = UserId(UUID.randomUUID)) // false
 [NOTE.speaker]
 --
 It might be a call, callback, record in ledger (esp in event-sourcing).
+[source, scala]
+----
+import $ivy.`com.softwaremill.quicklens::quicklens:1.6.0`, com.softwaremill.quicklens._
+----
 --
 
 === !
@@ -337,35 +341,37 @@ Show some examples in REPL here.
 
 [source, scala]
 --
-import cats.effect.IO
+import cats.effect._
 
-val program = IO.delay { scala.io.StdIn.readLine }
-  .map(PlanName.parse)
+val program = IO.delay(scala.io.StdIn.readLine) // IO[String]
+  .map(PlanName.parse) // IO[Either[String, PlanName]]
   .flatMap {
     case Left(error) => IO.raiseError(new Exception(error))
     case Right(name) => IO.pure(name)
-  }
-  .map { name => println(s"Valid plan name: $name") }
+  } // IO[PlanName]
+  .map { name =>
+    println(s"Valid plan name: $name")
+  } // IO[Unit]
   .handleError {
     case e: Throwable => e.printStackTrace()
-  }
+  } // IO[Unit]
 --
 
 [source, scala]
 --
-program.unsafeRunSync
+program.unsafeRunSync // Unit
 --
 
 [source, scala]
 --
 program.unsafeRunAsync { result =>
   println(s"Program finished with: $result")
-}
+} // Unit
 --
 
 [source, scala]
 --
-program.unsafeToFuture
+program.unsafeToFuture // Future[Unit]
 --
 
 [NOTE.speaker]
@@ -374,4 +380,201 @@ program.unsafeToFuture
 ----
 import $ivy.`org.typelevel::cats-effect:2.1.3`, cats.effect._
 ----
+--
+
+=== !
+
+[source, scala]
+--
+import scala.concurrent.duration._
+
+IO.delay(scala.io.StdIn.readLine)
+  .flatMap { in =>
+     val nap      = IO.sleep(2.second)
+     val asBool   = nap >> IO.delay(in.toBoolean).attempt
+     val asInt    = nap >> IO.delay(in.toInt).attempt
+     val asDouble = nap >> IO.delay(in.toDouble).attempt
+     (asBool, asInt, asDouble).parMapN { (b, i, d) =>
+       println(s"$in:\nbool: $b,\nint: $i,\ndouble: $d")
+     }
+  }
+  .unsafeRunAsync(result => println(result))
+--
+
+[NOTE.speaker]
+--
+Requires previous definitions and:
+[source, scala]
+----
+implicit val contextShift: cats.effect.ContextShift[IO] = IO.contextShift(
+  scala.concurrent.ExecutionContext.global
+)
+
+implicit val timer: cats.effect.Timer[IO] = IO.timer(
+  scala.concurrent.ExecutionContext.fromExecutorService(
+    java.util.concurrent.Executors.newCachedThreadPool()
+  )
+)
+----
+--
+
+== Services
+
+=== !
+
+[source, scala]
+--
+case class PlanId(value: UUID) extends AnyVal
+case class PlanVersion(value: Int) extends AnyVal
+case class PlanVersionedId(id: PlanId, version: PlanVersion)
+
+sealed trait PlanStatus
+object PlanStatus {
+  case object NotLaunched extends PlanStatus
+  case class Launched(at: Instant) extends PlanStatus
+  case class Retired(validFrom: Instant, validUntil: Instant)
+    extends PlanStatus
+}
+
+case class PlanData(name: PlanName, status: PlanStatus)
+--
+
+[source, scala]
+--
+case class Plan(versionedId: PlanVersionedId, data: PlanData){
+  override def equals(obj: Any): Boolean = obj match {
+    case Plan(`versionedId`, _) => true
+    case _                      => false
+  }
+  override def hashCode: Int = versionedId.hashCode
+}
+--
+
+[NOTE.speaker]
+--
+[source, scala]
+----
+import java.util.UUID
+import java.time.Instant
+----
+--
+
+=== !
+
+[source, scala]
+--
+trait PlanServices {
+
+  def createPlan(data: PlanData): IO[Plan]
+  def updatePlan(id: PlanId, data: PlanData): IO[Plan]
+  def launchPlan(versionedId: PlanVersionedId,
+                 at: Instant): IO[Plan]
+  def retirePlan(versionedId: PlanVersionedId,
+                 at: Instant): IO[Plan]
+}
+--
+
+[source, scala]
+--
+trait PlanRepository {
+
+  def listActivePlans: IO[List[Plan]]
+  def listPlanVersions(id: PlanId): IO[List[Plan]]
+  def getExactPlan(versionedId: PlanVersionedId): IO[Plan]
+  def getLastestPlan(id: PlanId): IO[Plan]
+}
+--
+
+[NOTE.speaker]
+--
+[source, scala]
+----
+import scala.collection.immutable.ListMap
+import cats.effect.concurrent.Ref
+
+val (planRepository, planServices) = {
+val inMemory = Ref.unsafe[IO, Map[PlanId, ListMap[PlanVersion, Plan]]](Map.empty)
+
+val repo: PlanRepository = new PlanRepository {
+  def listActivePlans: IO[List[Plan]] = inMemory.get.map { plans =>
+    val now = Instant.now
+    plans.values.toList.flatMap(_.values.toList).filter { plan =>
+      plan.data.status match {
+        case PlanStatus.NotLaunched       => false
+        case PlanStatus.Launched(at)      => at.isBefore(now)
+        case PlanStatus.Retired(from, to) => from.isBefore(now) && now.isBefore(to)
+      }
+    }
+  }
+  def listPlanVersions(id: PlanId): IO[List[Plan]] = inMemory.get.map(_(id).values.toList)
+  def getExactPlan(versionedId: PlanVersionedId): IO[Plan] = inMemory.get.map(_(versionedId.id)(versionedId.version))
+  def getLastestPlan(id: PlanId): IO[Plan] = inMemory.get.map(_(id).last._2)
+}
+
+val services: PlanServices = new PlanServices {
+  def createPlan(data: PlanData): IO[Plan] = {
+    val id = PlanId(java.util.UUID.randomUUID)
+    val version = PlanVersion(1)
+    val plan = Plan(PlanVersionedId(id, version), data)
+    inMemory.update { plans =>
+      plans.updated(id, ListMap(version -> plan))
+    } >> IO.pure(plan)
+  }
+  def updatePlan(id: PlanId, data: PlanData): IO[Plan] = inMemory.updateAndGet { plans =>
+    val newPlan = plans(id).last._2
+      .modify(_.versionedId.version).using(old => PlanVersion(old.value + 1))
+      .modify(_.data).setTo(data)
+    plans.updatedWith(newPlan.versionedId.id)(_.map(_ + (newPlan.versionedId.version -> newPlan)))
+  }.map(_(id).last._2)
+  def launchPlan(versionedId: PlanVersionedId,
+                 at: Instant): IO[Plan] = inMemory.updateAndGet {
+    _.modify(_.at(versionedId.id).at(versionedId.version).data.status).setTo(PlanStatus.Launched(at))
+  }.map(_(versionedId.id)(versionedId.version))
+  def retirePlan(versionedId: PlanVersionedId,
+                 at: Instant): IO[Plan] = inMemory.updateAndGet {
+    _.modify(_.at(versionedId.id).at(versionedId.version).data.status).using {
+      case PlanStatus.Launched(from) => PlanStatus.Retired(from, at)
+      case _                         => PlanStatus.Retired(at, at)
+    }
+  }.map(_(versionedId.id)(versionedId.version))
+}
+
+repo -> services
+}
+----
+--
+
+=== !
+
+[source, scala]
+--
+val planName = PlanName.parse("my plan").right.get
+val planLifecycleTest = for {
+  plan1 <- planServices.createPlan(
+      PlanData(planName, PlanStatus.NotLaunched))
+  _ <- planServices.launchPlan(plan1.versionedId, Instant.now)
+  _ <- IO.sleep(1.second)
+  active <- planRepository.listActivePlans
+  _ = println("Active plans\n" + active.mkString("\n"))
+  retired <- planServices.retirePlan(plan1.versionedId,
+                                     Instant.now)
+} yield retired
+--
+
+[source, scala]
+--
+val planVersioningTest = for {
+  oldPlan <- planLifecycleTest
+  plan2 <- planServices.updatePlan(
+      oldPlan.versionedId.id,
+      PlanData(oldPlan.data.name, PlanStatus.NotLaunched))
+  versions <- planRepository.listPlanVersions(
+      plan2.versionedId.id)
+  _ = println("Versions\n" + versions.mkString("\n"))
+} yield versions
+--
+
+[source, scala]
+--
+planVersioningTest.unsafeRunSync
 --
