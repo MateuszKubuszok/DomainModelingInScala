@@ -309,7 +309,7 @@ import $ivy.`org.typelevel::cats-core:2.1.0`, cats._, cats.data._, cats.implicit
 
 [source, scala]
 --
-val version2: PlanName = PlanName.parse("version 2").right.get
+val version2: PlanName = ... // PlanName("version 2")
 --
 
 [source, scala]
@@ -333,6 +333,10 @@ for {
 [NOTE.speaker]
 --
 Show some examples in REPL here.
+[source, scala]
+----
+val version2: PlanName = PlanName.parse("version 2").right.get
+----
 --
 
 === Side effects

@@ -277,7 +277,7 @@ names match {
 // validation succeeded: personal liability</code></pre></div></div>
 <aside class="notes"><div class="paragraph"><p>Smart constructors might be treated as a special case of a factory.</p></div>
 <div class="paragraph"><p>First use case for Cats.</p></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import $ivy.`org.typelevel::cats-core:2.1.0`, cats._, cats.data._, cats.implicits._</code></pre></div></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val version2: PlanName = PlanName.parse("version 2").right.get</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import $ivy.`org.typelevel::cats-core:2.1.0`, cats._, cats.data._, cats.implicits._</code></pre></div></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val version2: PlanName = ... // PlanName("version 2")</code></pre></div></div>
 <div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">PlanName.parse("household").flatMap { name1 =&gt;
   PlanName.parse(name1.value + " insurance").map { name2 =&gt;
     name2 + version2
@@ -288,7 +288,8 @@ names match {
   name1 &lt;- PlanName.parse("household")
   name2 &lt;- PlanName.parse(name1.value + " insurance")
 } yield name2 + version2</code></pre></div></div>
-<aside class="notes"><div class="paragraph"><p>Show some examples in REPL here.</p></div></aside></div></section><section id="_side_effects"><h2>Side effects</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import cats.effect._
+<aside class="notes"><div class="paragraph"><p>Show some examples in REPL here.</p></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val version2: PlanName = PlanName.parse("version 2").right.get</code></pre></div></div></aside></div></section><section id="_side_effects"><h2>Side effects</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import cats.effect._
 
 val program = IO.delay(scala.io.StdIn.readLine) // IO[String]
   .map(PlanName.parse) // IO[Either[String, PlanName]]
