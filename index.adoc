@@ -857,3 +857,5 @@ That I've written:
 == Summary
 
 == Questions?
+
+== Thank you
