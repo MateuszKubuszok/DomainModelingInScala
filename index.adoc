@@ -420,6 +420,8 @@ implicit val timer: cats.effect.Timer[IO] = IO.timer(
 
 == Services
 
+=== Plan's subdomain
+
 === !
 
 [source, scala]
@@ -580,6 +582,13 @@ val planVersioningTest = for {
 planVersioningTest.unsafeRunSync
 --
 
+[NOTE.speaker]
+--
+From this moment on, no mocks as it would be too much to bother.
+--
+
+=== Contract's subdomain
+
 === !
 
 [source, scala]
@@ -647,10 +656,40 @@ trait ContractRepository {
 
 [source, scala]
 --
+sealed trait ContractEvent
 case class ContractCreated(id: ContractId)
+    extends ContractEvent
 case class ContractRenewed(id: ContractId)
+    extends ContractEvent
 case class ContractTerminated(id: ContractId)
+    extends ContractEvent
 --
+
+=== Customer's subdomain
+
+=== !
+
+[source, scala]
+--
+case class CustomerData(
+  name:      CustomerName,
+  surname:   CustomerSurname,
+  addresses: NonEmptyList[Address],
+  email:     Email
+)
+case class Customer(id: CustomerId, data: CustomerData) {
+  // ... override equals and hashCode
+}
+--
+
+[source, scala]
+--
+trait CustomerRepository {
+  def getCustomerById(id: CustomerId): IO[Customer]
+}
+--
+
+=== Payment's domain
 
 === !
 
@@ -672,19 +711,6 @@ object PaymentStatus {
 }
 --
 
-[source, scala]
---
-case class CustomerData(
-  name:      CustomerName,
-  surname:   CustomerSurname,
-  addresses: NonEmptyList[Address],
-  email:     Email
-)
-case class Customer(id: CustomerId, data: CustomerData) {
-  // ... override equals and hashCode
-}
---
-
 === !
 
 [source, scala]
@@ -701,14 +727,15 @@ object PaymentMethod {
 [source, scala]
 --
 case class PaymentData(
-  contractId:     ContractId,
-  paymentType:    PaymentType,
-  paymentMethod:  PaymentMethod,
-  status:         PaymentStatus,
-  amount:         Money,
-  customerId:     CustomerId,
-  customerData:   CustomerData,
-  invoiceAddress: Address
+  contractId:      ContractId,
+  paymentType:     PaymentType,
+  paymentMethod:   PaymentMethod,
+  status:          PaymentStatus,
+  amount:          Money,
+  customerId:      CustomerId,
+  customerName:    CustomerName,
+  customerSurname: CustomerSurname,
+  invoiceAddress:  Address
 )
 case class Payment(id: PaymentId, data: PaymentData) {
   // ... override equals and hashCode
@@ -719,18 +746,22 @@ case class Payment(id: PaymentId, data: PaymentData) {
 
 [source, scala]
 --
-trait CustomerRepository {
-  def getCustomerById(id: CustomerId): IO[Customer]
-}
---
-
-[source, scala]
---
 import squants.market._
 
 trait QuotingServices {
   def quoteForContract(
         data: ContractData): IO[(Money, PaymentType)]
+}
+--
+
+[source, scala]
+--
+trait CustomerPaymentMethodServices {
+  def setMethodForCustomer(
+        customerId: CustomerId,
+        paymentMethod: PaymentMethod): IO[Unit]
+  def getMethodForCustomer(
+        customerId: CustomerId): IO[PaymentMethod]
 }
 --
 
@@ -746,6 +777,83 @@ trait PaymentServices {
 }
 --
 
+=== Event sourcing
+
 === !
 
-TODO: combine services together
+[source, scala]
+--
+def createPayment(contractId: ContractId) = for {
+  contract <- contractRepository.getContract(contractId)
+  customerId = contractData.customerId
+  customer <- customerRepository.getCustomerById(customerId)
+  method <- customerPaymentMethodServices
+    .getMethodForCustomer(customerId)
+  (price, paymentType) <-
+    quotingServices.quoteForContract(contract.data)
+  data = PaymentData(contractId, paymentType, method,
+    PaymentStatus.Scheduled, price, customerId,
+    customerData.name, customerData.surname,
+    customerData.addresses.head)
+  payment <- paymentServices.createPayment(data)
+} yield payment
+--
+
+[NOTE.speaker]
+--
+Requires better-monadic-for.
+--
+
+=== !
+
+[source, scala]
+--
+import fs2._
+
+val contractEvents: Stream[IO, ContractEvent] = ...
+
+val paymentsCreationProjection: IO[Unit] =
+  contractEvent
+    .collect {
+      case ContractCreated(contractId) => contractId
+    }
+    .evalMap(createPayment)
+    .drain.compile
+--
+
+=== !
+
+[source, scala]
+--
+val fiber: IO[Fiber[IO, Unit]] =
+  paymentsCreationProjection.start
+--
+
+[source, scala]
+--
+val projections = for {
+  _ <- paymentsCreationProjection.start
+  _ <- paymentsRenewedProjection.start
+  _ <- paymentsCancelledProjection.start
+  _ = println("All projections started")
+} yield ()
+--
+
+== Other interesting things that we didn't have space for
+
+[%step]
+* resources (e.g. https://typelevel.org/cats-effect/datatypes/resource.html[`cats.effect.Resource[IO, A]`])
+* persistence (e.g. https://tpolecat.github.io/doobie/[Doobie])
+* serialization (e.g. https://circe.github.io/circe/[Circe])
+* HTTP (e.g. https://http4s.org/[Http4s] and https://sttp.softwaremill.com/en/latest/[STTP])
+
+=== Some E2E examples of services in Cats
+
+That I've written:
+
+* https://github.com/MateuszKubuszok/remote-sync-example[Deezer-Postgres synchronization service]
+* https://github.com/MateuszKubuszok/branchtalk[Reddit clone]
+
+== Summary
+
+== Questions?

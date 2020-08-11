@@ -330,7 +330,7 @@ implicit val timer: cats.effect.Timer[IO] = IO.timer(
     java.util.concurrent.Executors.newCachedThreadPool()
   )
 )</code></pre></div></div></aside></div></section></section>
-<section><section id="_services"><h2>Services</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class PlanId(value: UUID) extends AnyVal
+<section><section id="_services"><h2>Services</h2></section><section id="_plans_subdomain"><h2>Plan&#8217;s subdomain</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class PlanId(value: UUID) extends AnyVal
 case class PlanVersion(value: Int) extends AnyVal
 case class PlanVersionedId(id: PlanId, version: PlanVersion)
 
@@ -439,7 +439,8 @@ val planLifecycleTest = for {
       plan2.versionedId.id)
   _ = println("Versions\n" + versions.mkString("\n"))
 } yield versions</code></pre></div></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">planVersioningTest.unsafeRunSync</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class CustomerId(value: UUID) extends AnyVal
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">planVersioningTest.unsafeRunSync</code></pre></div></div>
+<aside class="notes"><div class="paragraph"><p>From this moment on, no mocks as it would be too much to bother.</p></div></aside></div></section><section id="_contracts_subdomain"><h2>Contract&#8217;s subdomain</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class CustomerId(value: UUID) extends AnyVal
 case class ContractId(value: UUID) extends AnyVal
 sealed trait ContractDuration
 object ContractDuration {
@@ -476,9 +477,24 @@ case class Coverage(start: Instant, end: Instant)</code></pre></div></div>
   def listContractsForCustomer(
         customerId: CustomerId): IO[List[Contract]]
   def listContractsForRenewal(at: Instant): IO[List[Contract]]
-}</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class ContractCreated(id: ContractId)
+}</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">sealed trait ContractEvent
+case class ContractCreated(id: ContractId)
+    extends ContractEvent
 case class ContractRenewed(id: ContractId)
-case class ContractTerminated(id: ContractId)</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class PaymentId(value: UUID) extends AnyVal
+    extends ContractEvent
+case class ContractTerminated(id: ContractId)
+    extends ContractEvent</code></pre></div></div></div></section><section id="_customers_subdomain"><h2>Customer&#8217;s subdomain</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class CustomerData(
+  name:      CustomerName,
+  surname:   CustomerSurname,
+  addresses: NonEmptyList[Address],
+  email:     Email
+)
+case class Customer(id: CustomerId, data: CustomerData) {
+  // ... override equals and hashCode
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait CustomerRepository {
+  def getCustomerById(id: CustomerId): IO[Customer]
+}</code></pre></div></div></div></section><section id="_payments_domain"><h2>Payment&#8217;s domain</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class PaymentId(value: UUID) extends AnyVal
 sealed trait PaymentType
 object PaymentType {
   case object SinglePayment extends PaymentType
@@ -491,15 +507,6 @@ object PaymentStatus {
   case object Completed extends PaymentStatus
   case object Failed extends PaymentStatus
   case object Cancelled extends PaymentStatus
-}</code></pre></div></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class CustomerData(
-  name:      CustomerName,
-  surname:   CustomerSurname,
-  addresses: NonEmptyList[Address],
-  email:     Email
-)
-case class Customer(id: CustomerId, data: CustomerData) {
-  // ... override equals and hashCode
 }</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">sealed trait PaymentMethod
 object PaymentMethod {
   case class CreditCard(...) extends PaymentMethod
@@ -508,25 +515,30 @@ object PaymentMethod {
   ...
 }</code></pre></div></div>
 <div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">case class PaymentData(
-  contractId:     ContractId,
-  paymentType:    PaymentType,
-  paymentMethod:  PaymentMethod,
-  status:         PaymentStatus,
-  amount:         Money,
-  customerId:     CustomerId,
-  customerData:   CustomerData,
-  invoiceAddress: Address
+  contractId:      ContractId,
+  paymentType:     PaymentType,
+  paymentMethod:   PaymentMethod,
+  status:          PaymentStatus,
+  amount:          Money,
+  customerId:      CustomerId,
+  customerName:    CustomerName,
+  customerSurname: CustomerSurname,
+  invoiceAddress:  Address
 )
 case class Payment(id: PaymentId, data: PaymentData) {
   // ... override equals and hashCode
-}</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait CustomerRepository {
-  def getCustomerById(id: CustomerId): IO[Customer]
-}</code></pre></div></div>
-<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import squants.market._
+}</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import squants.market._
 
 trait QuotingServices {
   def quoteForContract(
         data: ContractData): IO[(Money, PaymentType)]
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait CustomerPaymentMethodServices {
+  def setMethodForCustomer(
+        customerId: CustomerId,
+        paymentMethod: PaymentMethod): IO[Unit]
+  def getMethodForCustomer(
+        customerId: CustomerId): IO[PaymentMethod]
 }</code></pre></div></div>
 <div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">trait PaymentServices {
   def schedulePayment(data: PaymentData): IO[Payment]
@@ -535,7 +547,42 @@ trait QuotingServices {
   def retryPayment(
         paymentId: PaymentId,
         newMethod: Option[PaymentMethod]): IO[Payment]
-}</code></pre></div></div></div></section><section><div class="slide-content"><div class="paragraph"><p>TODO: combine services together</p></div></div></section></section></div></div><script src="./js/reveal.js"></script><script>Array.prototype.slice.call(document.querySelectorAll('.slides section')).forEach(function(slide) {
+}</code></pre></div></div></div></section><section id="_event_sourcing"><h2>Event sourcing</h2></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">def createPayment(contractId: ContractId) = for {
+  contract &lt;- contractRepository.getContract(contractId)
+  customerId = contractData.customerId
+  customer &lt;- customerRepository.getCustomerById(customerId)
+  method &lt;- customerPaymentMethodServices
+    .getMethodForCustomer(customerId)
+  (price, paymentType) &lt;-
+    quotingServices.quoteForContract(contract.data)
+  data = PaymentData(contractId, paymentType, method,
+    PaymentStatus.Scheduled, price, customerId,
+    customerData.name, customerData.surname,
+    customerData.addresses.head)
+  payment &lt;- paymentServices.createPayment(data)
+} yield payment</code></pre></div></div>
+<aside class="notes"><div class="paragraph"><p>Requires better-monadic-for.</p></div></aside></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">import fs2._
+
+val contractEvents: Stream[IO, ContractEvent] = ...
+
+val paymentsCreationProjection: IO[Unit] =
+  contractEvent
+    .collect {
+      case ContractCreated(contractId) =&gt; contractId
+    }
+    .evalMap(createPayment)
+    .drain.compile</code></pre></div></div></div></section><section><div class="slide-content"><div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val fiber: IO[Fiber[IO, Unit]] =
+  paymentsCreationProjection.start</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code data-lang="scala" class="language-scala hljs" data-noescape="true">val projections = for {
+  _ &lt;- paymentsCreationProjection.start
+  _ &lt;- paymentsRenewedProjection.start
+  _ &lt;- paymentsCancelledProjection.start
+  _ = println("All projections started")
+} yield ()</code></pre></div></div></div></section></section>
+<section><section id="_other_interesting_things_that_we_didnt_have_space_for"><h2>Other interesting things that we didn&#8217;t have space for</h2><div class="slide-content"><div class="ulist"><ul><li class="fragment"><p>resources (e.g. <a href="https://typelevel.org/cats-effect/datatypes/resource.html"><code>cats.effect.Resource[IO, A</a></code>])</p></li><li class="fragment"><p>persistence (e.g. <a href="https://tpolecat.github.io/doobie/">Doobie</a>)</p></li><li class="fragment"><p>serialization (e.g. <a href="https://circe.github.io/circe/">Circe</a>)</p></li><li class="fragment"><p>HTTP (e.g. <a href="https://http4s.org/">Http4s</a> and <a href="https://sttp.softwaremill.com/en/latest/">STTP</a>)</p></li></ul></div></div></section><section id="_some_e2e_examples_of_services_in_cats"><h2>Some E2E examples of services in Cats</h2><div class="slide-content"><div class="paragraph"><p>That I&#8217;ve written:</p></div>
+<div class="ulist"><ul><li><p><a href="https://github.com/MateuszKubuszok/remote-sync-example">Deezer-Postgres synchronization service</a></p></li><li><p><a href="https://github.com/MateuszKubuszok/branchtalk">Reddit clone</a></p></li></ul></div></div></section></section>
+<section id="_summary"><h2>Summary</h2></section>
+<section id="_questions"><h2>Questions?</h2></section></div></div><script src="./js/reveal.js"></script><script>Array.prototype.slice.call(document.querySelectorAll('.slides section')).forEach(function(slide) {
   if (slide.getAttribute('data-background-color')) return;
   // user needs to explicitly say he wants CSS color to override otherwise we might break custom css or theme (#226)
   if (!(slide.classList.contains('canvas') || slide.classList.contains('background'))) return;
