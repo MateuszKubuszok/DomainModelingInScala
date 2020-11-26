@@ -5,7 +5,7 @@ based on dark.css by Ivan Sagalaev
 
 */
 
-@import(../font/fira-code/fira_code.css);
+@import url(../font/fira-code/fira_code.css);
 
 .hljs {
   display: block;
